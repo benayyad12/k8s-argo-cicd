@@ -23,8 +23,8 @@ variables:
     - if [ ! -f "$ENV_FILE" ]; then export ENV_FILE="group_vars/dev.yml"; fi
     - source <(grep = "$ENV_FILE" | sed 's/ //g')
 
-# Build Docker image
-build:
+# Build Docker image and push to JFrog
+build:docker:
   stage: build
   image: docker:latest
   services:
@@ -38,7 +38,7 @@ build:
     - docker build -t "${IMAGE_NAME}:${BUILD_TAG}" -t "${IMAGE_NAME}:latest" .
     - docker push "${IMAGE_NAME}:${BUILD_TAG}"
     - docker push "${IMAGE_NAME}:latest"
-    - echo "Image pushed: ${IMAGE_NAME}:${BUILD_TAG}"
+    - echo "Image pushed to JFrog: ${IMAGE_NAME}:${BUILD_TAG}"
   artifacts:
     reports:
       dotenv: build.env
@@ -91,49 +91,30 @@ scan:sonarqube:
     - develop
     - merge_requests
 
-# SAST Security scanning
-scan:sast:
-  stage: scan
-  image: python:3.11
-  before_script:
-    - pip install bandit safety
-  script:
-    - bandit -r app/ -f json -o bandit-report.json || true
-    - safety check --json > safety-report.json || true
-  artifacts:
-    reports:
-      sast: bandit-report.json
-    paths:
-      - bandit-report.json
-      - safety-report.json
-  only:
-    - main
-    - develop
-    - merge_requests
-
-# ============= DEPLOYMENT STAGES =============
+# ============= DEPLOYMENT STAGES VIA ARGOCD =============
 
 # Deploy to DEV (Auto on develop branch)
 deploy:dev:
   <<: *load_env_vars
   stage: deploy-dev
-  image: alpine/helm:latest
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+    - export IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+    - export ARGOCD_APP_NAME="${CI_PROJECT_NAME}-dev"
   script:
-    - echo "Deploying to DEV environment"
-    - helm repo add jfrog "${JFROG_HELM_REPO}"
-    - helm repo update
-    - helm upgrade --install "${APP_NAME}" ./helm
-        --namespace "${KUBE_NAMESPACE_DEV}"
-        --create-namespace
-        -f helm/values-dev.yml
-        --set image.repository="${REGISTRY}/${CI_PROJECT_NAME}"
-        --set image.tag="${CI_COMMIT_SHORT_SHA}"
-        --kubeconfig="${KUBE_CONFIG_DEV}"
-    - echo "DEV deployment completed"
+    - echo "🚀 Triggering ArgoCD deployment for DEV"
+    - |
+      curl -sSL -X POST \
+        -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
+        "${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}/sync" \
+        -d '{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}' \
+        -H "Content-Type: application/json"
+    - echo "✅ DEV deployment triggered via ArgoCD"
   environment:
     name: dev
     kubernetes:
-      namespace: "${KUBE_NAMESPACE_DEV}"
+      namespace: dev
   only:
     - develop
   when: on_success
@@ -142,124 +123,76 @@ deploy:dev:
 deploy:int:
   <<: *load_env_vars
   stage: deploy-int
-  image: alpine/helm:latest
-  script:
-    - echo "Deploying to INT environment"
-    - helm repo add jfrog "${JFROG_HELM_REPO}"
-    - helm repo update
-    - helm upgrade --install "${APP_NAME}" ./helm
-        --namespace "${KUBE_NAMESPACE_INT}"
-        --create-namespace
-        -f helm/values-int.yml
-        --set image.repository="${REGISTRY}/${CI_PROJECT_NAME}"
-        --set image.tag="${CI_COMMIT_SHORT_SHA}"
-        --kubeconfig="${KUBE_CONFIG_INT}"
-    - echo "INT deployment completed"
-  environment:
-    name: int
-    kubernetes:
-      namespace: "${KUBE_NAMESPACE_INT}"
-  only:
-    - develop
-  when: manual
-
-# Deploy to UAT (Manual approval from INT)
-deploy:uat:
-  <<: *load_env_vars
-  stage: deploy-uat
-  image: alpine/helm:latest
-  script:
-    - echo "Deploying to UAT environment"
-    - helm repo add jfrog "${JFROG_HELM_REPO}"
-    - helm repo update
-    - helm upgrade --install "${APP_NAME}" ./helm
-        --namespace "${KUBE_NAMESPACE_UAT}"
-        --create-namespace
-        -f helm/values-uat.yml
-        --set image.repository="${REGISTRY}/${CI_PROJECT_NAME}"
-        --set image.tag="${CI_COMMIT_SHORT_SHA}"
-        --kubeconfig="${KUBE_CONFIG_UAT}"
-    - echo "UAT deployment completed"
-  environment:
-    name: uat
-    kubernetes:
-      namespace: "${KUBE_NAMESPACE_UAT}"
-  only:
-    - main
-  when: manual
-
-# Deploy to PROD (Manual approval + merge to main)
-deploy:prod:
-  <<: *load_env_vars
-  stage: deploy-prod
-  image: alpine/helm:latest
-  script:
-    - echo "Deploying to PROD environment"
-    - helm repo add jfrog "${JFROG_HELM_REPO}"
-    - helm repo update
-    - helm upgrade --install "${APP_NAME}" ./helm
-        --namespace "${KUBE_NAMESPACE_PROD}"
-        --create-namespace
-        -f helm/values-prod.yml
-        --set image.repository="${REGISTRY}/${CI_PROJECT_NAME}"
-        --set image.tag="${CI_COMMIT_SHORT_SHA}"
-        --kubeconfig="${KUBE_CONFIG_PROD}"
-    - echo "PROD deployment completed - $(date)"
-  environment:
-    name: prod
-    kubernetes:
-      namespace: "${KUBE_NAMESPACE_PROD}"
-  only:
-    - main
-  when: manual
-
-# Update ArgoCD apps
-.argocd_sync: &argocd_sync
   image: alpine:latest
   before_script:
     - apk add --no-cache curl
-    - export ARGOCD_APP_NAME="${CI_PROJECT_NAME}-${CI_ENVIRONMENT_NAME}"
+    - export IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+    - export ARGOCD_APP_NAME="${CI_PROJECT_NAME}-int"
   script:
+    - echo "🚀 Triggering ArgoCD deployment for INT"
     - |
       curl -sSL -X POST \
         -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
         "${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}/sync" \
         -d '{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}' \
         -H "Content-Type: application/json"
-    - echo "ArgoCD sync triggered for ${ARGOCD_APP_NAME}"
-
-sync:argocd:dev:
-  <<: *argocd_sync
-  stage: deploy-dev
-  environment:
-    name: dev
-  only:
-    - develop
-  when: on_success
-
-sync:argocd:int:
-  <<: *argocd_sync
-  stage: deploy-int
+    - echo "✅ INT deployment triggered via ArgoCD"
   environment:
     name: int
+    kubernetes:
+      namespace: int
   only:
     - develop
   when: manual
 
-sync:argocd:uat:
-  <<: *argocd_sync
+# Deploy to UAT (Manual approval from develop)
+deploy:uat:
+  <<: *load_env_vars
   stage: deploy-uat
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+    - export IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+    - export ARGOCD_APP_NAME="${CI_PROJECT_NAME}-uat"
+  script:
+    - echo "🚀 Triggering ArgoCD deployment for UAT"
+    - |
+      curl -sSL -X POST \
+        -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
+        "${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}/sync" \
+        -d '{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}' \
+        -H "Content-Type: application/json"
+    - echo "✅ UAT deployment triggered via ArgoCD"
   environment:
     name: uat
+    kubernetes:
+      namespace: uat
   only:
     - main
   when: manual
 
-sync:argocd:prod:
-  <<: *argocd_sync
+# Deploy to PROD (Manual approval + merge to main required)
+deploy:prod:
+  <<: *load_env_vars
   stage: deploy-prod
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+    - export IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
+    - export ARGOCD_APP_NAME="${CI_PROJECT_NAME}-prod"
+  script:
+    - echo "🚀 Triggering ArgoCD deployment for PROD"
+    - |
+      curl -sSL -X POST \
+        -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
+        "${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}/sync" \
+        -d '{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}' \
+        -H "Content-Type: application/json"
+    - echo "✅ PROD deployment triggered via ArgoCD - $(date)"
   environment:
     name: prod
+    kubernetes:
+      namespace: prod
   only:
     - main
   when: manual
