@@ -1,0 +1,23 @@
+# ArgoCD Application - env d
+# Nom ArgoCD = <APP_NAME>-d (APP_NAME doit correspondre à my-app ou au nom réel)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: my-app-d
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/benayyad12/k8s-argo-cicd.git
+    targetRevision: develop
+    path: helm
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-d.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: d
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
