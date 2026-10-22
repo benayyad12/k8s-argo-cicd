@@ -1,0 +1,58 @@
+# Deployment for DEV environment
+# Scratch image, minimal resources, 1 replica
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-app-dev
+  namespace: dev
+  labels:
+    app: python-app
+    env: dev
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: python-app
+      env: dev
+  template:
+    metadata:
+      labels:
+        app: python-app
+        env: dev
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      serviceAccountName: python-app-dev
+      containers:
+        - name: app
+          image: jfrog.artifactory.com/python-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: VAULT_ROLE
+              value: "dev-app"
+            - name: VAULT_TOKEN_FILE
+              value: "/var/run/secrets/vault/token"
+          envFrom:
+            - configMapRef:
+                name: app-config-dev
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+          volumeMounts:
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+      volumes:
+        - name: vault-token
+          emptyDir: {}

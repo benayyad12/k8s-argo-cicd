@@ -1,0 +1,7 @@
+# Namespace for INT
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: int
+  labels:
+    environment: int

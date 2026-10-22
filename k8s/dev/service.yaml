@@ -1,0 +1,19 @@
+# Service for DEV environment
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-app-dev
+  namespace: dev
+  labels:
+    app: python-app
+    env: dev
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: python-app
+    env: dev

@@ -1,0 +1,12 @@
+# PodDisruptionBudget for UAT
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: python-app-uat
+  namespace: uat
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: python-app
+      env: uat

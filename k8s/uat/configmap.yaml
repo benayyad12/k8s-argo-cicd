@@ -1,0 +1,19 @@
+# ConfigMap for UAT environment
+# Production-like config with monitoring
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config-uat
+  namespace: uat
+data:
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "uat"
+  API_TIMEOUT: "60"
+  DEBUG: "false"
+  VAULT_ADDR: "https://vault.vault.svc.cluster.local:8200"
+  VAULT_NAMESPACE: "uat"
+  DATABASE_POOL_SIZE: "30"
+  CACHE_TTL: "7200"
+  ENABLE_METRICS: "true"
+  ENABLE_TRACING: "true"
+  TRACING_SAMPLE_RATE: "0.1"

@@ -1,0 +1,19 @@
+# Service for INT environment
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-app-int
+  namespace: int
+  labels:
+    app: python-app
+    env: int
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: python-app
+    env: int

@@ -1,0 +1,88 @@
+# Deployment for INT environment
+# Staging image, 2 replicas, standard resources
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-app-int
+  namespace: int
+  labels:
+    app: python-app
+    env: int
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: python-app
+      env: int
+  template:
+    metadata:
+      labels:
+        app: python-app
+        env: int
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: python-app-int
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - python-app
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: app
+          image: jfrog.artifactory.com/python-app:staging
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: VAULT_ROLE
+              value: "int-app"
+            - name: VAULT_TOKEN_FILE
+              value: "/var/run/secrets/vault/token"
+          envFrom:
+            - configMapRef:
+                name: app-config-int
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+      volumes:
+        - name: vault-token
+          emptyDir: {}

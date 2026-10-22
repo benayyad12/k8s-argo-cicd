@@ -1,0 +1,8 @@
+# Namespace for UAT
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: uat
+  labels:
+    environment: uat
+    tier: staging
