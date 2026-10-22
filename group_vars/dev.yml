@@ -1,0 +1,14 @@
+# Development Environment Variables
+APP_NAME: "python-app"
+ENV: "dev"
+KUBE_NAMESPACE_DEV: "dev"
+DOCKER_IMAGE_TYPE: "scratch"
+REPLICAS: 1
+LOG_LEVEL: "DEBUG"
+DATABASE_URL: "postgresql://dev-user:dev-pass@postgres-dev:5432/app_dev"
+REDIS_URL: "redis://redis-dev:6379/0"
+API_TIMEOUT: "30"
+MEMORY_LIMIT: "256Mi"
+CPU_LIMIT: "100m"
+MEMORY_REQUEST: "128Mi"
+CPU_REQUEST: "50m"

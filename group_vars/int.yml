@@ -1,0 +1,14 @@
+# Integration Environment Variables
+APP_NAME: "python-app"
+ENV: "int"
+KUBE_NAMESPACE_INT: "int"
+DOCKER_IMAGE_TYPE: "staging"
+REPLICAS: 2
+LOG_LEVEL: "INFO"
+DATABASE_URL: "postgresql://int-user:int-pass@postgres-int:5432/app_int"
+REDIS_URL: "redis://redis-int:6379/0"
+API_TIMEOUT: "60"
+MEMORY_LIMIT: "512Mi"
+CPU_LIMIT: "250m"
+MEMORY_REQUEST: "256Mi"
+CPU_REQUEST: "100m"

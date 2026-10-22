@@ -1,0 +1,17 @@
+# Production Environment Variables
+APP_NAME: "python-app"
+ENV: "prod"
+KUBE_NAMESPACE_PROD: "prod"
+DOCKER_IMAGE_TYPE: "stable"
+REPLICAS: 3
+LOG_LEVEL: "WARNING"
+DATABASE_URL: "postgresql://prod-user:prod-pass@postgres-prod:5432/app_prod"
+REDIS_URL: "redis://redis-prod:6379/0"
+API_TIMEOUT: "120"
+MEMORY_LIMIT: "1Gi"
+CPU_LIMIT: "500m"
+MEMORY_REQUEST: "512Mi"
+CPU_REQUEST: "250m"
+ENABLE_METRICS: "true"
+ENABLE_TRACING: "true"
+HIGH_AVAILABILITY: "true"
