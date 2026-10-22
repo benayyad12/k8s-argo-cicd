@@ -1,8 +1,8 @@
-# ArgoCD Application for DEV environment
+# ArgoCD Application - env dev
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: python-app-dev
+  name: my-app-dev
   namespace: argocd
 spec:
   project: default
@@ -11,30 +11,12 @@ spec:
     targetRevision: develop
     path: helm
     helm:
-      releaseName: python-app-dev
-      values: |
-        replicaCount: 1
-        image:
-          registry: jfrog.artifactory.com
-          repository: python-app
-          tag: "latest"
-          pullPolicy: Always
-        vault:
-          enabled: true
-          role: "dev-app"
-          address: "http://vault.vault.svc.cluster.local:8200"
-        env:
-          LOG_LEVEL: "DEBUG"
-          ENVIRONMENT: "dev"
-          API_TIMEOUT: "30"
-          DEBUG: "true"
-          DATABASE_POOL_SIZE: "5"
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: dev
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
     syncOptions:
       - CreateNamespace=true
