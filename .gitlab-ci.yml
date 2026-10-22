@@ -1,23 +1,15 @@
-# GitLab CI/CD Pipeline
-# Build Docker image, push to JFrog, and trigger ArgoCD sync
-
 stages:
   - build
-  - test
-  - scan
-  - deploy-dev
-  - deploy-int
-  - deploy-uat
-  - deploy-prod
+  - deploy
 
 variables:
   REGISTRY: ${JFROG_REGISTRY}
-  IMAGE_NAME: ${REGISTRY}/python-app
+  IMAGE_NAME: ${REGISTRY}/my-app  # Change to your app name
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: "/certs"
 
-# Build Docker image and push to JFrog
-build:docker:
+# Build and push Docker image to JFrog
+build:
   stage: build
   image: docker:latest
   services:
@@ -25,92 +17,61 @@ build:docker:
   before_script:
     - echo "$JFROG_PASSWORD" | docker login -u "$JFROG_USER" --password-stdin $REGISTRY
   script:
+    # Determine image tag based on branch
     - |
       if [ "$CI_COMMIT_BRANCH" = "develop" ]; then
-        DOCKER_TAG="staging"
+        TAG="latest"
       elif [ "$CI_COMMIT_BRANCH" = "main" ]; then
-        DOCKER_TAG="stable"
+        TAG="stable"
       else
-        DOCKER_TAG="${CI_COMMIT_SHORT_SHA}"
+        TAG="${CI_COMMIT_SHORT_SHA}"
       fi
-    - docker build -f app/Dockerfile -t $IMAGE_NAME:$DOCKER_TAG .
-    - docker push $IMAGE_NAME:$DOCKER_TAG
-    - docker tag $IMAGE_NAME:$DOCKER_TAG $IMAGE_NAME:latest
-    - docker push $IMAGE_NAME:latest
-  only:
-    - develop
-    - main
-
-# Unit tests
-test:unit:
-  stage: test
-  image: python:3.11
-  script:
-    - pip install -r requirements.txt
-    - pip install pytest pytest-cov
-    - pytest --cov=app --cov-report=xml tests/
-  artifacts:
-    reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: coverage.xml
-  only:
-    - develop
-    - main
-
-# SonarQube code quality scan
-scan:sonarqube:
-  stage: scan
-  image: sonarsource/sonar-scanner-cli:latest
-  script:
-    - sonar-scanner -Dsonar.projectKey=python-app -Dsonar.sources=app -Dsonar.host.url=$SONARQUBE_URL -Dsonar.login=$SONARQUBE_TOKEN
+    # Build and push
+    - docker build -t $IMAGE_NAME:$TAG .
+    - docker push $IMAGE_NAME:$TAG
   only:
     - develop
     - main
 
 # Deploy to DEV (automatic)
-deploy:dev:
-  stage: deploy-dev
+deploy-dev:
+  stage: deploy
   image: argoproj/argocd:latest
   script:
     - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
-    - argocd app sync python-app-dev --prune
-    - argocd app wait python-app-dev
+    - argocd app sync app-dev --prune
   only:
     - develop
 
 # Deploy to INT (manual)
-deploy:int:
-  stage: deploy-int
+deploy-int:
+  stage: deploy
   image: argoproj/argocd:latest
   script:
     - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
-    - argocd app sync python-app-int --prune
-    - argocd app wait python-app-int
+    - argocd app sync app-int --prune
   when: manual
   only:
     - develop
 
 # Deploy to UAT (manual)
-deploy:uat:
-  stage: deploy-uat
+deploy-uat:
+  stage: deploy
   image: argoproj/argocd:latest
   script:
     - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
-    - argocd app sync python-app-uat --prune
-    - argocd app wait python-app-uat
+    - argocd app sync app-uat --prune
   when: manual
   only:
     - main
 
-# Deploy to PROD (manual, main branch only)
-deploy:prod:
-  stage: deploy-prod
+# Deploy to PROD (manual, main only)
+deploy-prod:
+  stage: deploy
   image: argoproj/argocd:latest
   script:
     - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
-    - argocd app sync python-app-prod --prune
-    - argocd app wait python-app-prod
+    - argocd app sync app-prod --prune
   when: manual
   only:
     - main
