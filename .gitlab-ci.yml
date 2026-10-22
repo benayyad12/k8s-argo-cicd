@@ -1,3 +1,6 @@
+# GitLab CI/CD Pipeline
+# Build Docker image, push to JFrog, and trigger ArgoCD sync
+
 stages:
   - build
   - test
@@ -8,20 +11,10 @@ stages:
   - deploy-prod
 
 variables:
+  REGISTRY: ${JFROG_REGISTRY}
+  IMAGE_NAME: ${REGISTRY}/python-app
   DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: ""
-  REGISTRY: "${JFROG_REGISTRY}"
-  REGISTRY_USER: "${JFROG_USER}"
-  REGISTRY_PASSWORD: "${JFROG_PASSWORD}"
-  SONAR_HOST_URL: "${SONARQUBE_URL}"
-  SONAR_LOGIN: "${SONARQUBE_TOKEN}"
-
-# Load environment-specific variables
-.load_env_vars: &load_env_vars
-  before_script:
-    - export ENV_FILE="group_vars/${CI_COMMIT_BRANCH}.yml"
-    - if [ ! -f "$ENV_FILE" ]; then export ENV_FILE="group_vars/dev.yml"; fi
-    - source <(grep = "$ENV_FILE" | sed 's/ //g')
+  DOCKER_TLS_CERTDIR: "/certs"
 
 # Build Docker image and push to JFrog
 build:docker:
@@ -29,170 +22,95 @@ build:docker:
   image: docker:latest
   services:
     - docker:dind
-  variables:
-    DOCKER_TLS_VERIFY: 0
+  before_script:
+    - echo "$JFROG_PASSWORD" | docker login -u "$JFROG_USER" --password-stdin $REGISTRY
   script:
-    - export BUILD_TAG="${CI_COMMIT_SHORT_SHA}"
-    - export IMAGE_NAME="${REGISTRY}/${CI_PROJECT_NAME}"
-    - docker login -u "${REGISTRY_USER}" -p "${REGISTRY_PASSWORD}" "${REGISTRY}"
-    - docker build -t "${IMAGE_NAME}:${BUILD_TAG}" -t "${IMAGE_NAME}:latest" .
-    - docker push "${IMAGE_NAME}:${BUILD_TAG}"
-    - docker push "${IMAGE_NAME}:latest"
-    - echo "Image pushed to JFrog: ${IMAGE_NAME}:${BUILD_TAG}"
-  artifacts:
-    reports:
-      dotenv: build.env
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "develop" ]; then
+        DOCKER_TAG="staging"
+      elif [ "$CI_COMMIT_BRANCH" = "main" ]; then
+        DOCKER_TAG="stable"
+      else
+        DOCKER_TAG="${CI_COMMIT_SHORT_SHA}"
+      fi
+    - docker build -f app/Dockerfile -t $IMAGE_NAME:$DOCKER_TAG .
+    - docker push $IMAGE_NAME:$DOCKER_TAG
+    - docker tag $IMAGE_NAME:$DOCKER_TAG $IMAGE_NAME:latest
+    - docker push $IMAGE_NAME:latest
   only:
-    - main
     - develop
-    - /^release\/.*$/
-    - /^hotfix\/.*$/
+    - main
 
 # Unit tests
 test:unit:
   stage: test
   image: python:3.11
-  before_script:
-    - pip install -r requirements.txt
-    - pip install pytest pytest-cov pytest-xdist
   script:
-    - pytest tests/ -v --cov=app --cov-report=xml --cov-report=html
+    - pip install -r requirements.txt
+    - pip install pytest pytest-cov
+    - pytest --cov=app --cov-report=xml tests/
   artifacts:
     reports:
       coverage_report:
         coverage_format: cobertura
         path: coverage.xml
-    paths:
-      - htmlcov/
-  coverage: '/TOTAL.*\s+(\d+%)$/'
   only:
-    - main
     - develop
-    - merge_requests
+    - main
 
-# Code quality scan with SonarQube
+# SonarQube code quality scan
 scan:sonarqube:
   stage: scan
   image: sonarsource/sonar-scanner-cli:latest
-  before_script:
-    - export BUILD_TAG="${CI_COMMIT_SHORT_SHA}"
   script:
-    - sonar-scanner
-        -Dsonar.projectKey="${CI_PROJECT_NAME}"
-        -Dsonar.projectName="${CI_PROJECT_NAME}"
-        -Dsonar.sources=app/
-        -Dsonar.exclusions="**/*test*,**/migrations/**"
-        -Dsonar.host.url="${SONAR_HOST_URL}"
-        -Dsonar.login="${SONAR_LOGIN}"
-        -Dsonar.scm.provider=git
-        -Dsonar.branch.name="${CI_COMMIT_BRANCH}"
+    - sonar-scanner -Dsonar.projectKey=python-app -Dsonar.sources=app -Dsonar.host.url=$SONARQUBE_URL -Dsonar.login=$SONARQUBE_TOKEN
   only:
-    - main
     - develop
-    - merge_requests
+    - main
 
-# ============= DEPLOYMENT STAGES VIA ARGOCD =============
-
-# Deploy to DEV (Auto on develop branch)
+# Deploy to DEV (automatic)
 deploy:dev:
-  <<: *load_env_vars
   stage: deploy-dev
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache curl
-    - export IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
-    - export ARGOCD_APP_NAME="${CI_PROJECT_NAME}-dev"
+  image: argoproj/argocd:latest
   script:
-    - echo "🚀 Triggering ArgoCD deployment for DEV"
-    - |
-      curl -sSL -X POST \
-        -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
-        "${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}/sync" \
-        -d '{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}' \
-        -H "Content-Type: application/json"
-    - echo "✅ DEV deployment triggered via ArgoCD"
-  environment:
-    name: dev
-    kubernetes:
-      namespace: dev
+    - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
+    - argocd app sync python-app-dev --prune
+    - argocd app wait python-app-dev
   only:
     - develop
-  when: on_success
 
-# Deploy to INT (Manual approval from DEV)
+# Deploy to INT (manual)
 deploy:int:
-  <<: *load_env_vars
   stage: deploy-int
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache curl
-    - export IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
-    - export ARGOCD_APP_NAME="${CI_PROJECT_NAME}-int"
+  image: argoproj/argocd:latest
   script:
-    - echo "🚀 Triggering ArgoCD deployment for INT"
-    - |
-      curl -sSL -X POST \
-        -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
-        "${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}/sync" \
-        -d '{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}' \
-        -H "Content-Type: application/json"
-    - echo "✅ INT deployment triggered via ArgoCD"
-  environment:
-    name: int
-    kubernetes:
-      namespace: int
+    - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
+    - argocd app sync python-app-int --prune
+    - argocd app wait python-app-int
+  when: manual
   only:
     - develop
-  when: manual
 
-# Deploy to UAT (Manual approval from develop)
+# Deploy to UAT (manual)
 deploy:uat:
-  <<: *load_env_vars
   stage: deploy-uat
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache curl
-    - export IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
-    - export ARGOCD_APP_NAME="${CI_PROJECT_NAME}-uat"
+  image: argoproj/argocd:latest
   script:
-    - echo "🚀 Triggering ArgoCD deployment for UAT"
-    - |
-      curl -sSL -X POST \
-        -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
-        "${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}/sync" \
-        -d '{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}' \
-        -H "Content-Type: application/json"
-    - echo "✅ UAT deployment triggered via ArgoCD"
-  environment:
-    name: uat
-    kubernetes:
-      namespace: uat
+    - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
+    - argocd app sync python-app-uat --prune
+    - argocd app wait python-app-uat
+  when: manual
   only:
     - main
-  when: manual
 
-# Deploy to PROD (Manual approval + merge to main required)
+# Deploy to PROD (manual, main branch only)
 deploy:prod:
-  <<: *load_env_vars
   stage: deploy-prod
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache curl
-    - export IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
-    - export ARGOCD_APP_NAME="${CI_PROJECT_NAME}-prod"
+  image: argoproj/argocd:latest
   script:
-    - echo "🚀 Triggering ArgoCD deployment for PROD"
-    - |
-      curl -sSL -X POST \
-        -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
-        "${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APP_NAME}/sync" \
-        -d '{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}' \
-        -H "Content-Type: application/json"
-    - echo "✅ PROD deployment triggered via ArgoCD - $(date)"
-  environment:
-    name: prod
-    kubernetes:
-      namespace: prod
+    - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
+    - argocd app sync python-app-prod --prune
+    - argocd app wait python-app-prod
+  when: manual
   only:
     - main
-  when: manual

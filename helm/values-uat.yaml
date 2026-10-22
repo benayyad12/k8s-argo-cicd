@@ -1,0 +1,74 @@
+# Environment-specific Helm values override for UAT
+
+replicaCount: 2
+
+image:
+  registry: jfrog.artifactory.com
+  repository: python-app
+  tag: staging
+  pullPolicy: IfNotPresent
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "200"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: app-uat.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: python-app-uat-tls
+      hosts:
+        - app-uat.example.com
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 250m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 75
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsReadOnlyRootFilesystem: true
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - python-app
+          topologyKey: kubernetes.io/hostname
+
+env:
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "uat"
+  API_TIMEOUT: "60"
+  DEBUG: "false"
+  DATABASE_POOL_SIZE: "30"
+  CACHE_TTL: "7200"
+  ENABLE_METRICS: "true"
+  ENABLE_TRACING: "true"
+  TRACING_SAMPLE_RATE: "0.1"
+
+vault:
+  enabled: true
+  role: "uat-app"
+  address: "https://vault.vault.svc.cluster.local:8200"
