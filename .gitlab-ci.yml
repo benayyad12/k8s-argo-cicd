@@ -58,21 +58,11 @@ deploy-int:
     - if: '$CI_COMMIT_BRANCH == "develop"'
       when: manual
 
-deploy-uat:
-  extends: .gitops-deploy
-  variables:
-    ENV: uat
-    SRC: dev
-    TAG: ""
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
-      when: manual
-
 deploy-prd:
   extends: .gitops-deploy
   variables:
     ENV: prd
-    SRC: uat
+    SRC: int
     TAG: ""
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
