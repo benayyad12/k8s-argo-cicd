@@ -1,0 +1,11 @@
+# Helm Chart for Python App
+# Generic, adaptable to any Docker image from JFrog
+
+apiVersion: v2
+name: python-app
+description: Generic Helm chart for deploying any Python app from JFrog
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+maintainers:
+  - name: DevOps Team

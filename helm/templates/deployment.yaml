@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "python-app.fullname" . }}
+  labels:
+    {{- include "python-app.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "python-app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "python-app.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "python-app.fullname" . }}
+      {{- if .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: app
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            {{- if .Values.vault.enabled }}
+            - name: VAULT_ADDR
+              value: {{ .Values.vault.address }}
+            - name: VAULT_ROLE
+              value: {{ .Values.vault.role }}
+            - name: VAULT_TOKEN_FILE
+              value: "/var/run/secrets/vault/token"
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "python-app.fullname" . }}-config
+          {{- if .Values.probe.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probe.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probe.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probe.liveness.periodSeconds }}
+          {{- end }}
+          {{- if .Values.probe.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probe.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probe.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probe.readiness.periodSeconds }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.vault.enabled }}
+          volumeMounts:
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+          {{- end }}
+      {{- if .Values.vault.enabled }}
+      volumes:
+        - name: vault-token
+          emptyDir: {}
+      {{- end }}

@@ -1,0 +1,69 @@
+# Vault Configuration for Secret Management
+# Efficient and production-ready
+
+---
+# Vault Auth Policy for DEV
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-policy-dev
+  namespace: vault
+data:
+  dev-app.hcl: |
+    path "secret/data/dev/*" {
+      capabilities = ["read", "list"]
+    }
+    path "database/creds/dev-app" {
+      capabilities = ["read"]
+    }
+
+---
+# Vault Auth Policy for INT
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-policy-int
+  namespace: vault
+data:
+  int-app.hcl: |
+    path "secret/data/int/*" {
+      capabilities = ["read", "list"]
+    }
+    path "database/creds/int-app" {
+      capabilities = ["read"]
+    }
+
+---
+# Vault Auth Policy for UAT
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-policy-uat
+  namespace: vault
+data:
+  uat-app.hcl: |
+    path "secret/data/uat/*" {
+      capabilities = ["read", "list"]
+    }
+    path "database/creds/uat-app" {
+      capabilities = ["read"]
+    }
+
+---
+# Vault Auth Policy for PROD
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-policy-prod
+  namespace: vault
+data:
+  prod-app.hcl: |
+    path "secret/data/prod/*" {
+      capabilities = ["read", "list"]
+    }
+    path "database/creds/prod-app" {
+      capabilities = ["read"]
+    }
+    path "pki/issue/prod-app" {
+      capabilities = ["create", "update"]
+    }
