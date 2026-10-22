@@ -1,77 +1,42 @@
+# .gitlab-ci.yml - déploiement simple via ArgoCD (image déjà construite sur JFrog)
 stages:
-  - build
   - deploy
 
-variables:
-  REGISTRY: ${JFROG_REGISTRY}
-  IMAGE_NAME: ${REGISTRY}/my-app  # Change to your app name
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: "/certs"
-
-# Build and push Docker image to JFrog
-build:
-  stage: build
-  image: docker:latest
-  services:
-    - docker:dind
-  before_script:
-    - echo "$JFROG_PASSWORD" | docker login -u "$JFROG_USER" --password-stdin $REGISTRY
+.argocd-sync:
+  stage: deploy
+  image: argoproj/argocd:latest
   script:
-    # Determine image tag based on branch
-    - |
-      if [ "$CI_COMMIT_BRANCH" = "develop" ]; then
-        TAG="latest"
-      elif [ "$CI_COMMIT_BRANCH" = "main" ]; then
-        TAG="stable"
-      else
-        TAG="${CI_COMMIT_SHORT_SHA}"
-      fi
-    # Build and push
-    - docker build -t $IMAGE_NAME:$TAG .
-    - docker push $IMAGE_NAME:$TAG
-  only:
-    - develop
-    - main
+    - argocd login "$ARGOCD_SERVER" --username "$ARGOCD_USER" --password "$ARGOCD_PASSWORD" --grpc-web
+    - argocd app sync "$APP_NAME-$ENV" --prune
+    - argocd app wait "$APP_NAME-$ENV" --health --timeout 300
 
-# Deploy to DEV (automatic)
 deploy-dev:
-  stage: deploy
-  image: argoproj/argocd:latest
-  script:
-    - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
-    - argocd app sync app-dev --prune
-  only:
-    - develop
+  extends: .argocd-sync
+  variables:
+    ENV: dev
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
 
-# Deploy to INT (manual)
 deploy-int:
-  stage: deploy
-  image: argoproj/argocd:latest
-  script:
-    - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
-    - argocd app sync app-int --prune
-  when: manual
-  only:
-    - develop
+  extends: .argocd-sync
+  variables:
+    ENV: int
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
 
-# Deploy to UAT (manual)
 deploy-uat:
-  stage: deploy
-  image: argoproj/argocd:latest
-  script:
-    - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
-    - argocd app sync app-uat --prune
-  when: manual
-  only:
-    - main
+  extends: .argocd-sync
+  variables:
+    ENV: uat
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
 
-# Deploy to PROD (manual, main only)
 deploy-prod:
-  stage: deploy
-  image: argoproj/argocd:latest
-  script:
-    - argocd login $ARGOCD_SERVER --insecure --username admin --password $ARGOCD_PASSWORD
-    - argocd app sync app-prod --prune
-  when: manual
-  only:
-    - main
+  extends: .argocd-sync
+  variables:
+    ENV: prod
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
