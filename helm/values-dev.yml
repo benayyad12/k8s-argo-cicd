@@ -1,0 +1,47 @@
+# Helm values for DEV environment
+replicaCount: 1
+
+image:
+  repository: jfrog.artifactory.com/python-app
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 80
+
+env:
+  LOG_LEVEL: "DEBUG"
+  ENVIRONMENT: "dev"
+  API_TIMEOUT: "30"
+  DEBUG: "true"
+
+envFrom:
+  - configMapRef:
+      name: app-config-dev
+  - secretRef:
+      name: app-secrets-dev
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

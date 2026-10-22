@@ -1,0 +1,87 @@
+# Helm values for UAT environment
+replicaCount: 2
+
+image:
+  repository: jfrog.artifactory.com/python-app
+  pullPolicy: IfNotPresent
+  tag: "staging"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: "app-uat.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: app-uat-tls
+      hosts:
+        - app-uat.example.com
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 75
+
+env:
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "uat"
+  API_TIMEOUT: "60"
+  DEBUG: "false"
+  ENABLE_METRICS: "true"
+
+envFrom:
+  - configMapRef:
+      name: app-config-uat
+  - secretRef:
+      name: app-secrets-uat
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+nodeSelector:
+  workload: general
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - python-app
+          topologyKey: kubernetes.io/hostname

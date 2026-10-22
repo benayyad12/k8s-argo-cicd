@@ -1,0 +1,71 @@
+# Helm values for INT environment
+replicaCount: 2
+
+image:
+  repository: jfrog.artifactory.com/python-app
+  pullPolicy: IfNotPresent
+  tag: "staging"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+  hosts:
+    - host: "app-int.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: app-int-tls
+      hosts:
+        - app-int.example.com
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+env:
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "int"
+  API_TIMEOUT: "60"
+  DEBUG: "false"
+
+envFrom:
+  - configMapRef:
+      name: app-config-int
+  - secretRef:
+      name: app-secrets-int
+
+nodeSelector:
+  workload: general
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - python-app
+          topologyKey: kubernetes.io/hostname

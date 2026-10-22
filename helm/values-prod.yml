@@ -1,0 +1,134 @@
+# Helm values for PROD environment
+replicaCount: 3
+
+image:
+  repository: jfrog.artifactory.com/python-app
+  pullPolicy: IfNotPresent
+  tag: "stable"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "1000"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: "app.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: "api.example.com"
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: app-prod-tls
+      hosts:
+        - app.example.com
+        - api.example.com
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+env:
+  LOG_LEVEL: "WARNING"
+  ENVIRONMENT: "prod"
+  API_TIMEOUT: "120"
+  DEBUG: "false"
+  ENABLE_METRICS: "true"
+  ENABLE_TRACING: "true"
+  ENABLE_PROFILING: "false"
+
+envFrom:
+  - configMapRef:
+      name: app-config-prod
+  - secretRef:
+      name: app-secrets-prod
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 2
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  failureThreshold: 30
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsReadOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector:
+  workload: production
+
+tolerations:
+  - key: "production"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+                - python-app
+        topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-type
+              operator: In
+              values:
+                - production
