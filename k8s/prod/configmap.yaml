@@ -1,0 +1,20 @@
+# ConfigMap for PROD environment
+# Hardened, production-ready with full monitoring
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config-prod
+  namespace: prod
+data:
+  LOG_LEVEL: "WARNING"
+  ENVIRONMENT: "prod"
+  API_TIMEOUT: "120"
+  DEBUG: "false"
+  VAULT_ADDR: "https://vault.vault.svc.cluster.local:8200"
+  VAULT_NAMESPACE: "prod"
+  DATABASE_POOL_SIZE: "50"
+  CACHE_TTL: "10800"
+  ENABLE_METRICS: "true"
+  ENABLE_TRACING: "true"
+  TRACING_SAMPLE_RATE: "0.05"
+  ENABLE_PROFILING: "false"

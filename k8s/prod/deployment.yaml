@@ -1,0 +1,114 @@
+# Deployment for PROD environment
+# Stable image, 3+ replicas, high availability, security hardened
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-app-prod
+  namespace: prod
+  labels:
+    app: python-app
+    env: prod
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: python-app
+      env: prod
+  template:
+    metadata:
+      labels:
+        app: python-app
+        env: prod
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: python-app-prod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsReadOnlyRootFilesystem: true
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - python-app
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-type
+                    operator: In
+                    values:
+                      - production
+      containers:
+        - name: app
+          image: jfrog.artifactory.com/python-app:stable
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: VAULT_ROLE
+              value: "prod-app"
+            - name: VAULT_TOKEN_FILE
+              value: "/var/run/secrets/vault/token"
+          envFrom:
+            - configMapRef:
+                name: app-config-prod
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          volumeMounts:
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: vault-token
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

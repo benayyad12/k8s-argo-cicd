@@ -1,0 +1,39 @@
+# Ingress for PROD environment
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: python-app-prod
+  namespace: prod
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "1000"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - secretName: python-app-prod-tls
+      hosts:
+        - app.example.com
+        - api.example.com
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: python-app-prod
+                port:
+                  number: 80
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: python-app-prod
+                port:
+                  number: 80

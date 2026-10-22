@@ -1,0 +1,12 @@
+# PodDisruptionBudget for PROD
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: python-app-prod
+  namespace: prod
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: python-app
+      env: prod
