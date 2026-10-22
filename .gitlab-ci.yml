@@ -31,9 +31,11 @@ build:
     - git config user.name "gitlab-ci"
     - git remote set-url origin "https://oauth2:${GITOPS_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
+    - git fetch origin "$CI_COMMIT_BRANCH" && git checkout -B "$CI_COMMIT_BRANCH" "origin/$CI_COMMIT_BRANCH"
     - if [ -z "$TAG" ]; then TAG=$(awk '/^  tag:/{print $2}' helm/values-$SRC.yaml | tr -d '"'); fi
     - sed -i "s|^  tag:.*|  tag: \"$TAG\"|" helm/values-$ENV.yaml
     - git commit -am "deploy $ENV: $TAG [skip ci]" || echo "rien à commiter"
+    - git pull --rebase origin "$CI_COMMIT_BRANCH"
     - git push origin HEAD:$CI_COMMIT_BRANCH
     - argocd app sync "$APP_NAME-$ENV" --prune
     - argocd app wait "$APP_NAME-$ENV" --health --timeout 300
