@@ -1,0 +1,15 @@
+# UAT Environment Variables
+APP_NAME: "python-app"
+ENV: "uat"
+KUBE_NAMESPACE_UAT: "uat"
+DOCKER_IMAGE_TYPE: "staging"
+REPLICAS: 2
+LOG_LEVEL: "INFO"
+DATABASE_URL: "postgresql://uat-user:uat-pass@postgres-uat:5432/app_uat"
+REDIS_URL: "redis://redis-uat:6379/0"
+API_TIMEOUT: "60"
+MEMORY_LIMIT: "512Mi"
+CPU_LIMIT: "250m"
+MEMORY_REQUEST: "256Mi"
+CPU_REQUEST: "100m"
+ENABLE_METRICS: "true"
