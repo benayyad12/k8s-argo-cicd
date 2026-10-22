@@ -1,4 +1,7 @@
-# .gitlab-ci.yml - déploiement simple via ArgoCD (image déjà construite sur JFrog)
+# .gitlab-ci.yml - sync ArgoCD par environnement (image déjà sur JFrog)
+# Environnements : d, int, uat, prd
+# Variables GitLab : ARGOCD_SERVER, ARGOCD_USER, ARGOCD_PASSWORD, APP_NAME
+
 stages:
   - deploy
 
@@ -10,10 +13,10 @@ stages:
     - argocd app sync "$APP_NAME-$ENV" --prune
     - argocd app wait "$APP_NAME-$ENV" --health --timeout 300
 
-deploy-dev:
+deploy-d:
   extends: .argocd-sync
   variables:
-    ENV: dev
+    ENV: d
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
 
@@ -33,10 +36,10 @@ deploy-uat:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: manual
 
-deploy-prod:
+deploy-prd:
   extends: .argocd-sync
   variables:
-    ENV: prod
+    ENV: prd
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: manual
